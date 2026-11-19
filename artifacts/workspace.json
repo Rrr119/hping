@@ -1,0 +1,17 @@
+{
+  "root": "/home/dev/feedback/uid28755",
+  "B": "/home/dev/feedback/uid28755",
+  "sha": "fbc45c00be82beebffedb196264220ad3f5cb56c",
+  "wslDistro": "Ubuntu-26.04",
+  "source": {
+    "owner": "antirez",
+    "repo": "hping",
+    "sha": "fbc45c00be82beebffedb196264220ad3f5cb56c"
+  },
+  "fork": {
+    "owner": "Rrr119",
+    "repo": "hping",
+    "cloneUrl": "https://github.com/Rrr119/hping.git"
+  },
+  "at": "2026-11-19T22:25:26.490Z"
+}

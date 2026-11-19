@@ -18,6 +18,7 @@
 
 #include "hping2.h"
 #include "globals.h"
+#include "tcp_options.h"
 
 enum {	OPT_COUNT, OPT_INTERVAL, OPT_NUMERIC, OPT_QUIET, OPT_INTERFACE,
 	OPT_HELP, OPT_VERSION, OPT_DESTPORT, OPT_BASEPORT, OPT_TTL, OPT_ID,
@@ -36,7 +37,7 @@ enum {	OPT_COUNT, OPT_INTERVAL, OPT_NUMERIC, OPT_QUIET, OPT_INTERFACE,
 	OPT_ICMP_IPSRC, OPT_ICMP_IPDST, OPT_ICMP_SRCPORT, OPT_ICMP_DSTPORT,
 	OPT_ICMP_GW, OPT_FORCE_ICMP, OPT_APD_SEND, OPT_SCAN, OPT_FASTER,
 	OPT_BEEP, OPT_FLOOD, OPT_CLOCK_SKEW, OPT_CS_WINDOW, OPT_CS_WINDOW_SHIFT,
-        OPT_CS_VECTOR_LEN };
+        OPT_CS_VECTOR_LEN, OPT_TCP_OPTION, OPT_TSECR_CHECK };
 
 static struct ago_optlist hping_optlist[] = {
 	{ 'c',	"count",	OPT_COUNT,		AGO_NEEDARG },
@@ -109,6 +110,8 @@ static struct ago_optlist hping_optlist[] = {
 	{ '\0',	"faster",	OPT_FASTER,		AGO_NOARG|AGO_EXCEPT0 },
 	{ '\0',	"tr-keep-ttl",	OPT_TR_KEEP_TTL,	AGO_NOARG },
 	{ '\0', "tcp-timestamp",OPT_TCP_TIMESTAMP,	AGO_NOARG },
+	{ '\0', "tcp-option",	OPT_TCP_OPTION,		AGO_NEEDARG },
+	{ '\0', "tsecr-check",	OPT_TSECR_CHECK,	AGO_NOARG },
 	{ '\0', "tr-stop",	OPT_TR_STOP,		AGO_NOARG },
 	{ '\0',	"tr-no-rtt",	OPT_TR_NO_RTT,		AGO_NOARG },
 	{ '\0', "rand-dest",	OPT_RAND_DEST,		AGO_NOARG },
@@ -517,6 +520,26 @@ int parse_options(int argc, char **argv)
 		case OPT_TCP_TIMESTAMP:
 			opt_tcp_timestamp = TRUE;
 			break;
+		case OPT_TCP_OPTION: {
+			struct tcp_options parsed;
+
+			if (opt_rawipmode || opt_icmpmode || opt_udpmode) {
+				fprintf(stderr,
+					"Option error: --tcp-option only "
+					"works in TCP mode\n");
+				exit(1);
+			}
+			parsed.len = tcp_user_optlen;
+			memcpy(parsed.data, tcp_user_opt, tcp_user_optlen);
+			tcp_options_add_raw(&parsed, ago_optarg);
+			memcpy(tcp_user_opt, parsed.data, parsed.len);
+			tcp_user_optlen = parsed.len;
+			break;
+		}
+		case OPT_TSECR_CHECK:
+			opt_tsecr_check = TRUE;
+			opt_tcp_timestamp = TRUE;
+			break;
 		case OPT_TR_STOP:
 			opt_tr_stop = TRUE;
 			break;
@@ -659,6 +682,12 @@ int parse_options(int argc, char **argv)
 	} else if (opt_rand_dest == TRUE && ifname[0] == '\0') {
 		printf("Option error: you need to specify an interface "
 			"when the --rand-dest option is enabled\n");
+		exit(1);
+	}
+	else if (tcp_user_optlen &&
+		 (opt_rawipmode || opt_icmpmode || opt_udpmode))
+	{
+		printf("Option error: --tcp-option only works in TCP mode\n");
 		exit(1);
 	}
 

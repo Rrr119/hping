@@ -36,7 +36,7 @@ OBJ=	main.o getifname.o getlhs.o \
 	strlcpy.o arsglue.o random.o scan.o \
 	hstring.o script.o interface.o \
 	adbuf.o hex.o apdutils.o sbignum.o \
-	sbignum-tables.o $(ARSOBJ)
+	sbignum-tables.o tcp_options.o $(ARSOBJ)
 
 all: .depend hping3
 

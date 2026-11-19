@@ -16,7 +16,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#if !defined(OSTYPE_LINUX) && !defined(__linux__)
 #include <net/bpf.h>
+#endif
 #include <pcap.h>
 
 #include "globals.h"

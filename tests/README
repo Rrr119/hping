@@ -1,0 +1,55 @@
+hping3 TCP option / timestamp firewall probe tests
+===================================================
+
+These tests exercise the --tcp-option custom option builder and the
+--tsecr-check timestamp echo verification without needing root, real
+firewall hardware, nftables, tcpdump or scapy.
+
+Requirements
+------------
+  * gcc and GNU make
+  * Python 3 (standard library only)
+  * unprivileged user namespaces (unshare -Urn), veth and bridge support
+
+Run
+---
+  make
+  TMPDIR=<writable dir> ./tests/run_tests.sh
+
+Layout
+------
+  unit/test_tcp_options.c
+      C unit tests for the option builder and TSecr history ring.
+
+  fwbox/pkt.py
+      Minimal IPv4/TCP parse + build helpers and TCP option walking.
+
+  fwbox/firewall.py
+      AF_PACKET middlebox emulator with three policies:
+        passthrough - RFC 1323 host, echoes the received TSval
+        rewrite     - overwrites TSecr with a fixed bogus value
+        strip       - removes the timestamp option from its reply
+
+  fwbox/sniff.py
+      Captures hping's outgoing packets and prints their option layout,
+      used by the wire-format test.
+
+  scenario.sh
+      Runs inside an unprivileged namespace; builds a two-namespace veth
+      topology and executes one probe scenario.
+
+Topology
+--------
+An outer user+network namespace runs hping3 on veth-hp. A second network
+namespace (created with nested unshare) hosts the Python middlebox on
+veth-fw. The middlebox answers from the unconfigured VIP 10.20.0.3 so the
+child kernel cannot race it with its own TCP RST; a static neighbour entry
+resolves the VIP. AF_PACKET sockets use ETH_P_ALL (0x0003) because binding
+a specific ethertype inside an unprivileged user namespace delivers no
+frames on some kernels.
+
+What the three firewall probes assert
+-------------------------------------
+  1. passthrough -> hping prints "TCP timestamp echo: ... OK"
+  2. rewrite     -> hping prints "... MISMATCH" with the bogus TSecr
+  3. strip       -> hping prints "... option STRIPPED"

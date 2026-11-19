@@ -100,6 +100,11 @@ hping2 \- send (almost) arbitrary TCP/IP packets to network hosts
 ] [
 .B \-\-tcp-timestamp
 ] [
+.B \-\-tcp-option
+.I hex
+] [
+.B \-\-tsecr-check
+] [
 .B \-\-tr-stop
 ] [
 .B \-\-tr-keep-ttl
@@ -513,6 +518,31 @@ Send packets with a bad UDP/TCP checksum.
 .I --tcp-timestamp
 Enable the TCP timestamp option, and try to guess the timestamp update
 frequency and the remote system uptime.
+.TP
+.I --tcp-option hex
+Append a raw TCP option to every TCP packet. The argument is the option
+encoded as hex bytes, for example
+.B --tcp-option 030307
+adds a window scale (kind 3, length 3, shift 7) option. The option may be
+given more than once to stack several options, can be combined with
+.B --tcp-timestamp
+(the timestamp option is appended after the user supplied ones), and bytes
+may be separated by spaces, colons, commas or dashes. The whole option
+block is limited to 40 bytes and is automatically padded with NOP/EOL so
+the TCP data offset stays on a 32 bit boundary. It is only valid in TCP
+mode.
+.TP
+.I --tsecr-check
+Enable RFC 1323 timestamp echo verification. Implies
+.BR --tcp-timestamp .
+hping remembers the TSval values it sent and checks the TSecr field of
+incoming replies, printing
+.BR OK ,
+.B MISMATCH
+(the echo was rewritten or zeroed by a middlebox) or
+.B STRIPPED
+(the timestamp option was removed from the reply). This is useful to spot
+firewalls and other middleboxes that normalize TCP options.
 .TP
 .I -F --fin
 Set FIN tcp flag.

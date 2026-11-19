@@ -6,3 +6,6 @@ Makefile
 byteorder
 byteorder.h
 systype.h
+.tmp/
+__pycache__/
+*.pyc

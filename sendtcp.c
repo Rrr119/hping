@@ -20,6 +20,7 @@
 
 #include "hping2.h"
 #include "globals.h"
+#include "tcp_options.h"
 
 void send_tcp(void)
 {
@@ -28,10 +29,22 @@ void send_tcp(void)
 	char			*packet, *data;
 	struct mytcphdr		*tcp;
 	struct pseudohdr	*pseudoheader;
-	unsigned char		*tstamp;
+	unsigned char		*tcp_opts;
+	struct tcp_options	opts;
+	__u32			sent_tsval = 0;
 
-	if (opt_tcp_timestamp)
-		tcp_opt_size = 12;
+	memset(&opts, 0, sizeof(opts));
+	if (tcp_user_optlen) {
+		memcpy(opts.data, tcp_user_opt, tcp_user_optlen);
+		opts.len = tcp_user_optlen;
+	}
+	if (opt_tcp_timestamp) {
+		__u32 randts = rand() ^ (rand() << 16);
+
+		sent_tsval = tcp_options_add_timestamp(&opts, randts);
+	}
+	if (opts.len)
+		tcp_opt_size = tcp_options_finalize(&opts);
 
 	packet_size = TCPHDR_SIZE + tcp_opt_size + data_size;
 	packet = malloc(PSEUDOHDR_SIZE + packet_size);
@@ -41,7 +54,7 @@ void send_tcp(void)
 	}
 	pseudoheader = (struct pseudohdr*) packet;
 	tcp =  (struct mytcphdr*) (packet+PSEUDOHDR_SIZE);
-	tstamp = (unsigned char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE);
+	tcp_opts = (unsigned char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE);
 	data = (char*) (packet+PSEUDOHDR_SIZE+TCPHDR_SIZE+tcp_opt_size);
 	
 	memset(packet, 0, PSEUDOHDR_SIZE+packet_size);
@@ -64,15 +77,11 @@ void send_tcp(void)
 	tcp->th_win	= htons(src_winsize);
 	tcp->th_flags	= tcp_th_flags;
 
-	/* tcp timestamp option */
-	if (opt_tcp_timestamp) {
-		__u32 randts = rand() ^ (rand() << 16);
-		tstamp[0] = tstamp[1] = 1; /* NOOP */
-		tstamp[2] = 8;
-		tstamp[3] = 10; /* 10 bytes, kind+len+T1+T2 */
-		memcpy(tstamp+4, &randts, 4); /* random */
-		memset(tstamp+8, 0, 4); /* zero */
-	}
+	/* custom TCP options (may include the timestamp option) */
+	if (tcp_opt_size)
+		memcpy(tcp_opts, opts.data, tcp_opt_size);
+	if (opt_tsecr_check && opt_tcp_timestamp)
+		tcp_tsecr_record(htonl(sent_tsval));
 
 	/* data */
 	data_handler(data, data_size);

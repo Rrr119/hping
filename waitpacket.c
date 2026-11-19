@@ -19,10 +19,12 @@
 
 #include "hping2.h"
 #include "globals.h"
+#include "tcp_options.h"
 
 static int icmp_unreach_rtt(void *quoted_ip, int size,
 			    int *seqp, float *ms_delay);
 static void print_tcp_timestamp(void *tcp, int tcpsize, int rttms);
+static void print_tsecr_check(void *tcp, int tcpsize);
 static int recv_icmp(void *packet, size_t size);
 static int recv_udp(void *packet, size_t size);
 static int recv_tcp(void *packet, size_t size);
@@ -398,8 +400,11 @@ int recv_tcp(void *packet, size_t size)
 		}
 
 		/* Get and log the TCP timestamp */
-		if (opt_tcp_timestamp && status != S_RECV)
+		if (opt_tcp_timestamp && status != S_RECV) {
 			print_tcp_timestamp(packet, size, (int)ms_delay);
+			if (opt_tsecr_check)
+				print_tsecr_check(packet, size);
+		}
 out:
 		if (opt_incdport && !opt_force_incdport)
 			dst_port++;
@@ -608,7 +613,8 @@ void print_tcp_timestamp(void *tcp, int tcpsize, int rttms)
 {
 	int optlen;
 	unsigned char *opt;
-	__u32 tstamp = 0, echo;
+	__u32 tstamp = 0, echo, raw_echo = 0;
+	int ts_found = 0;
 	static __u32 first_tstamp = 0;
         static unsigned long long first_mstime = 0;
 	struct mytcphdr tmptcphdr;
@@ -646,14 +652,26 @@ void print_tcp_timestamp(void *tcp, int tcpsize, int rttms)
 			if (opt[1] != 10) /* bad len */
 				return;
 			memcpy(&tstamp, opt+2, 4);
-			memcpy(&echo, opt+6, 4);
+			memcpy(&raw_echo, opt+6, 4);
+			echo = ntohl(raw_echo);
 			tstamp = ntohl(tstamp);
-			echo = ntohl(echo);
+			ts_found = 1;
 			goto found;
 		}
 	}
 found:
+	if (!ts_found)
+		return; /* print_tsecr_check reports the stripped option */
 	printf("  TCP timestamp: tcpts=%u\n", tstamp);
+	if (opt_tsecr_check) {
+		if (tcp_tsecr_check(raw_echo))
+			printf("  TCP timestamp echo: tsecr=%u OK "
+			       "(matches a sent TSval)\n", echo);
+		else
+			printf("  TCP timestamp echo: tsecr=%u MISMATCH "
+			       "(rewritten or zeroed by a middlebox)\n",
+			       echo);
+	}
 	if (first_tstamp) {
 		int tsdiff;
 		int hz_set[] = { 2, 10, 100, 1000, 0 };
@@ -694,6 +712,47 @@ found:
             first_mstime = mstime();
         }
 	printf("\n");
+}
+
+/* When --tsecr-check is enabled, make sure the reply still carries a
+ * timestamp option. A missing option means a middlebox stripped it. */
+static void print_tsecr_check(void *tcp, int tcpsize)
+{
+	struct mytcphdr tmptcphdr;
+	unsigned int tcphdrlen, optlen;
+	unsigned char *opt;
+
+	if (tcpsize < TCPHDR_SIZE)
+		return;
+	memcpy(&tmptcphdr, tcp, sizeof(struct mytcphdr));
+	tcphdrlen = tmptcphdr.th_off * 4;
+	if (tcphdrlen <= 20 || tcphdrlen < (unsigned int)tcpsize) {
+		printf("  TCP timestamp echo: option STRIPPED "
+		       "(no TCP options in reply)\n\n");
+		return;
+	}
+	optlen = tcphdrlen - TCPHDR_SIZE;
+	opt = (unsigned char *)tcp + TCPHDR_SIZE;
+	while (optlen) {
+		switch (*opt) {
+		case TCPOPT_EOL:
+			goto stripped;
+		case TCPOPT_NOP:
+			opt++;
+			optlen--;
+			continue;
+		default:
+			if (optlen < 2 || opt[1] > optlen)
+				goto stripped;
+			if (opt[0] == TCPOPT_TIMESTAMP)
+				return; /* print_tcp_timestamp reports it */
+			optlen -= opt[1];
+			opt += opt[1];
+		}
+	}
+stripped:
+	printf("  TCP timestamp echo: option STRIPPED "
+	       "(timestamp removed by a middlebox)\n\n");
 }
 
 /* This function is exported to listen.c also */

@@ -144,4 +144,9 @@ extern pcap_t *pcapfp;
 extern char errbuf[PCAP_ERRBUF_SIZE];
 extern struct pcap_pkthdr hdr;
 
+/* custom TCP options (--tcp-option), assembled at send time */
+extern unsigned char	tcp_user_opt[40];
+extern unsigned int	tcp_user_optlen;
+extern int		opt_tsecr_check;
+
 #endif /* _GLOBALS_H */

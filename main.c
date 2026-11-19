@@ -154,6 +154,10 @@ unsigned char
 	lsr		[255] = {0},
 	ssr		[255] = {0};
 
+unsigned char	tcp_user_opt[40];
+unsigned int	tcp_user_optlen = 0;
+int		opt_tsecr_check = FALSE;
+
 unsigned
 	ip_optlen	= 0;
 
